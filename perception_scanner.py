@@ -1,7 +1,7 @@
 from os import walk
 from re import match
 from shutil import rmtree as rmtree
-from lib.nmap_scanner import nmap_seed_scan, get_hosts_to_scan
+from lib.nmap_scanner import nmap_ssa_scan, get_hosts_to_scan
 from lib.nmap_output_parser import parse_seed_nmap_xml
 
 tmp_dir = '/tmp/perception'
@@ -14,7 +14,7 @@ ios_show_fqdn_file = '%s/ios_show_fqdn.txt' % tmp_dir
 def main():
 
   hosts_to_scan = get_hosts_to_scan()
-  nmap_seed_scan(tmp_dir, hosts_to_scan)
+  nmap_ssa_scan(tmp_dir, hosts_to_scan)
   for root, dirs, files in walk(tmp_dir):
     for name in files:
       nmap_xml = match(r'(^(.*?).nmap.xml)', name)

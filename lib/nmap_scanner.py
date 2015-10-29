@@ -19,7 +19,8 @@ def get_hosts_to_scan():
     return hosts_to_scan
 
 
-def nmap_seed_scan(tmp_dir, scan_targets):
+def nmap_ssa_scan(tmp_dir, scan_targets):
+
   try:
     mkdir(tmp_dir)
   except FileExistsError:
