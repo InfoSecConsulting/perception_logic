@@ -2,7 +2,7 @@ import sys
 from lib.db_connector import connect
 from os import mkdir
 from models.db_tables import CoreRouter
-from lib.ssh_to_core import *
+from lib.ssh_to_host import *
 from lib.send_cmd import send_command
 from lib.cisco_cmds import IOSTERMLEN0,\
   IOS_SHOWARP,\
@@ -99,15 +99,3 @@ def get_network_info(tmp_dir,
     else:
       print('can\'t get child')
       exit()
-
-'''
-
-def get_nets_to_scan():
-  nets = session.query(LocalNet).all()
-  if nets:
-    nets_to_scan = []
-    for l in nets:
-      nets_to_scan.append(l.subnet)
-    return nets_to_scan
-
-'''

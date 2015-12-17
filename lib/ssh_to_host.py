@@ -1,13 +1,109 @@
 from lib.cisco_cmds import SHOWVER, IOSTERMLEN0, QOUTMORE, ASATERMPAGER0
 from lib.pormpts import PRIV_EXEC_MODE
-from pexpect import expect, spawnu, TIMEOUT
+from pexpect import spawnu, TIMEOUT
+
+ssh_newkey = 'Are you sure you want to continue connecting (yes/no)?'
+
+
+def check_creds(host, user, password):
+
+  # construct the ssh session
+  ssh_session = 'ssh %s@%s' % (user, host)
+  child = spawnu(ssh_session)
+
+  # expected return options
+  first_return = child.expect([TIMEOUT, ssh_newkey, '[P|p]assword', '.Connection refused\r\r\n'])
+
+  # connection timed out, send you packing
+  if first_return == 0:
+    print('[-] Error Connecting to %s' % host)
+    return 0
+
+  # we need to add the host to the know hosts file
+  if first_return == 1:
+    child.sendline('yes')
+    second_return = child.expect([TIMEOUT, '[P|p]assword'])
+
+    # timed out, send packing
+    if second_return == 0:
+      print('[-] Could not accept new key from %s' % host)
+      return 0
+
+    # you want the password, here it is
+    if second_return == 1:
+      child.sendline(password)
+      password_response_1 = child.expect([TIMEOUT, '[P|p]assword', '>', '#', '\$', '%', '[D|d]enied'])
+
+      if password_response_1 == 0:
+        print('Timed out sending user auth password to host %s' % host)
+        return 0
+
+      if password_response_1 == 1:
+        print('password is incorrect for host %s' % host)
+        return 0
+
+      if password_response_1 == 2:
+        print('password correct for host %s' % host)
+        return 1
+
+      if password_response_1 == 3:
+        print('password correct for host %s' % host)
+        return 1
+
+      if password_response_1 == 4:
+        print('password correct for host %s' % host)
+        return 1
+
+      if password_response_1 == 5:
+        print('password correct for host %s' % host)
+        return 1
+
+      if password_response_1 == 6:
+        print('password incorrect for host %s' % host)
+        return 0
+
+  # already have ssh key, send password
+  if first_return == 2:
+    child.sendline(password)
+    password_response_2 = child.expect([TIMEOUT, '[P|p]assword', '>', '#', '\$', '%', '[D|d]enied'])
+    if password_response_2 == 0:
+      print('Timed out sending user auth password to host %s' % host)
+      return 0
+
+    if password_response_2 == 1:
+      print('password is incorrect for host %s' % host)
+      return 0
+
+    if password_response_2 == 2:
+      print('password correct for host %s' % host)
+      return 1
+
+    if password_response_2 == 3:
+      print('password correct for host %s' % host)
+      return 1
+
+    if password_response_2 == 4:
+      print('password correct for host %s' % host)
+      return 1
+
+    if password_response_2 == 5:
+      print('password correct for host %s' % host)
+      return 1
+
+    if password_response_2 == 6:
+      print('password incorrect for host %s' % host)
+      return 0
+
+  # connection refused
+  if first_return == 3:
+    print('connection refused for host %s' % host)
+    return 0
 
 
 def cisco_enable_mode(user, host, passwd, en_passwd):
-  ssh_newkey = 'Are you sure you want to continue connecting (yes/no)?'
+
   constr = 'ssh %s@%s' % (user, host)
   child = spawnu(constr)
-
   ret = child.expect([TIMEOUT, ssh_newkey, '[P|p]assword:'])
   if ret == 0:
     print('[-] Error Connecting to %s' % host)

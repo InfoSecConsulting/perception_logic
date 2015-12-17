@@ -41,51 +41,14 @@ class Product(Base):
   updated_at = Column(TIMESTAMP(timezone=False), default=_get_date)
 
 
-class NvdVulnSource(Base):
-  __tablename__ = 'nvd_vuln_sources'
+class OpenvasAdmin(Base):
+  __tablename__ = 'openvas_admin'
 
-  id = Column(Integer, Sequence('nvd_vuln_sources_id_seq'), primary_key=True, nullable=False)
-  name = Column(Text)
-
-
-class NvdVulnReference(Base):
-  __tablename__ = 'nvd_vuln_references'
-
-  id = Column(Integer, Sequence('nvd_vuln_references_id_seq'), primary_key=True, nullable=False)
-
-  """Relation to tie vulnerability source disclosure to NVD vulnerabilities"""
-  nvd_vuln_source_id = Column(Integer, ForeignKey('nvd_vuln_sources.id'), nullable=False)
-  nvd_vuln_source = relationship('NvdVulnSource', backref='nvd_vuln_references', order_by=id)
-
-  nvd_ref_type = Column(Text)
-  href = Column(Text)
+  id = Column(Integer, Sequence('openvas_admin_id_seq'), primary_key=True, nullable=False)
+  username = Column(Text, unique=True, nullable=False)
+  password = Column(Text, nullable=False)
   created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
-  updated_at = Column(TIMESTAMP(timezone=False), default=_get_date)
-
-
-class NvdVuln(Base):
-  __tablename__ = 'nvd_vulns'
-
-  id = Column(Integer, Sequence('nvd_vulns_id_seq'), primary_key=True, nullable=False)
-  name = Column(Text, unique=True, nullable=False)
-
-  """Relation to tie products to vulnerabilities from the NVD"""
-  product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
-  product = relationship('Product', backref='nvd_vulns', order_by=id)
-
-  cveid = Column(Text, nullable=False)
-  vuln_published = Column(Text)
-  vuln_updated = Column(Text)
-  cvss = Column(Text)
-  cweid = Column(Text)
-
-  """Relation to tie references to vulnerabilities from the NVD"""
-  nvd_vuln_reference_id = Column(Integer, ForeignKey('nvd_vuln_references.id'))
-  nvd_vuln_reference = relationship('NvdVulnReference', backref='nvd_vulns', order_by=id)
-
-  summary = Column(Text)
-  created_at = Column(TIMESTAMP(timezone=False))
-  updated_at = Column(TIMESTAMP(timezone=False))
+  updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
 
 
 class MACVendor(Base):
@@ -102,6 +65,7 @@ class SmbUser(Base):
   username = Column(String, nullable=False, unique=True)
   encrypted_password = Column(String, nullable=False)
   encrypted_password_salt = Column(String, nullable=False)
+  domain_name = Column(String, nullable=False)
   description = Column(String)
 
   created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
@@ -110,7 +74,11 @@ class SmbUser(Base):
   def __init__(self,
                username=None,
                password=None,
+               domain_name=None,
                description=None):
+
+    if domain_name:
+      self.domain_name = domain_name
 
     if description:
       self.description = description
@@ -192,9 +160,9 @@ class InventoryHost(Base):
   info = Column(Text)
   comments = Column(Text)
 
-  """Relation to tie NVD vulnerabilities to inventory hosts"""
-  nvd_vuln_id = Column(Integer, ForeignKey('nvd_vulns.id'))
-  nvd_vuln = relationship('NvdVuln', backref='inventory_hosts', order_by=id)
+#  """Relation to tie NVD vulnerabilities to inventory hosts"""
+#  nvd_vuln_id = Column(Integer, ForeignKey('nvd_vulns.id'))
+#  nvd_vuln = relationship('NvdVuln', backref='inventory_hosts', order_by=id)
 
   created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
   updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)

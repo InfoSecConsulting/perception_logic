@@ -1,0 +1,7 @@
+# Database connection info
+
+drivername: postgres
+host: localhost
+database: perception
+username: perception
+password: perception

@@ -9,7 +9,7 @@ def wmic_query(domain, username, password, host, query):
     encoding = getdefaultlocale()[1]
     wmi_query = Popen(['wmic',
                        '-U',
-                       '%s/%s%%%s' % (domain, username, password),
+                       '%s/%s%%%s' % (domain, username, password.decode("utf-8")),
                        '//%s' % host,
                        '%s' % query],
                       stdout=PIPE)

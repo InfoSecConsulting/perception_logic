@@ -22,7 +22,7 @@ Session = sessionmaker()
 
 
 def connect():
-  db_yml = 'config/database.yml'
+  db_yml = 'etc/database.yml'
   db_info = parse_yml.db_info(db_yml)
   cursor = None
 

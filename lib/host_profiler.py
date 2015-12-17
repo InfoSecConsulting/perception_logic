@@ -1,9 +1,13 @@
 from re import search
-from models.db_tables import InventoryHost, InventorySvc, SmbUser
+from models.db_tables import InventoryHost, InventorySvc, SmbUser, LinuxUser
 from lib.wmic_parser import wmic_query
 from lib.crypt import decrypt_string
 from lib.db_connector import connect
+from lib.ssh_to_host import check_creds
 
+"""Connect to the database"""
+Session = connect()
+session = Session()
 
 win32_computersystem = 'select * from Win32_ComputerSystem'
 win32_account = 'select * from Win32_Account'
@@ -16,48 +20,149 @@ win32_logonsession = 'select * from Win32_LogonSession'
 win32_useraccount = 'select * from Win32_UserAccount'
 
 
-def profile_windows_hosts():
-  hosts = db.session.query(InventoryHost).all()
-  svcs = db.session.query(InventorySvc).all()
+def match_creds_to_hosts(host_list):
+
+  smb_hosts = list()
+  ssh_hosts = list()
+
+  #
+  # query db for hosts and services
+  #
+
+  smb_host_query = session.query(InventorySvc).filter(InventorySvc.portid == 135)
+  ssh_host_query = session.query(InventorySvc).filter(InventorySvc.portid == 22)
+
+  for host in host_list:
+
+    for i in smb_host_query:
+      if i.inventory_host.ipv4_addr == host:
+        smb_hosts.append(host)
+
+    for i in ssh_host_query:
+      if i.inventory_host.ipv4_addr == host:
+        ssh_hosts.append(host)
+
+  if smb_hosts:
+
+    #
+    # query db for svc accounts
+    #
+
+    smb_svc_accounts = session.query(SmbUser).all()
+    smb_accounts = list()
+
+    if smb_svc_accounts:
+
+      for u in smb_svc_accounts:
+
+        smb_dict = {'id': u.id,
+                    'username': u.username,
+                    'password': decrypt_string(str.encode(u.encrypted_password),
+                                               str.encode(u.encrypted_password_salt)),
+                    'domain_name': u.domain_name}
+
+        smb_accounts.append(smb_dict)
+
+      for h in smb_hosts:
+
+        for u in smb_accounts:
+              cs_query = wmic_query(u['domain_name'], u['username'], u['password'], h, win32_computersystem)
+
+              failed_login = {'[librpc/rpc/dcerpc_connect.c:828:dcerpc_pipe_connect_b_recv()] failed NT status (c0000022) in dcerpc_pipe_connect_b_recv': '[wmi/wmic.c:196:main()] ERROR: Loin to remote object.'}
+              error_login = {'[librpc/rpc/dcerpc_connect.c:828:dcerpc_pipe_connect_b_recv()] failed NT status (c0000017) in dcerpc_pipe_connect_b_recv': '[wmi/wmic.c:196:main()] ERROR: Login to remote object.'}
+              connection_refused = {'[librpc/rpc/dcerpc_connect.c:828:dcerpc_pipe_connect_b_recv()] failed NT status (c0000236) in dcerpc_pipe_connect_b_recv': '[wmi/wmic.c:196:main()] ERROR: Login to remote object.'}
+
+              if cs_query[0] == connection_refused:
+                print('connection refused from %s' % h)
+
+              if cs_query[0] == error_login:
+                print('error logging into %s' % h)
+
+              if cs_query[0] == failed_login:
+                print('failed login for %s' % h)
+
+              elif cs_query[0] != connection_refused and cs_query[0] != error_login and cs_query[0] != failed_login:
+                print('successful login to %s' % h)
+                session.query(InventoryHost).filter(InventoryHost.ipv4_addr == h)\
+                                            .update({InventoryHost.smb_user_id: u['id']})
+                session.commit()
+                print('smb user added to %s ' % h)
+
+  if ssh_hosts:
+    linux_svc_accounts = session.query(LinuxUser).all()
+    linux_accounts = list()
+
+    if linux_svc_accounts:
+
+      for u in linux_svc_accounts:
+
+        linux_dict = {'id': u.id,
+                      'username': u.username,
+                      'password': decrypt_string(str.encode(u.encrypted_password),
+                                                 str.encode(u.encrypted_password_salt)),
+                      'enable_password': decrypt_string(str.encode(u.encrypted_enable_password),
+                                                        str.encode(u.encrypted_enable_password_salt))}
+        linux_accounts.append(linux_dict)
+
+      for h in ssh_hosts:
+
+        #
+        # validate linux credentials
+        #
+        for u in linux_accounts:
+
+          ssh_to_host = check_creds(h, u['username'], u['password'].decode("utf-8"))
+
+          if ssh_to_host == 1:
+            session.query(InventoryHost).filter(InventoryHost.ipv4_addr == h)\
+                                        .update({InventoryHost.linux_user_id: u['id']})
+            session.commit()
+            print('linux user added to %s ' % h)
+
+
+def profile_windows_hosts(domain_name, username, password):
+
+  hosts = session.query(InventoryHost).all()
+  svcs = session.query(InventorySvc).all()
   windows_hosts = []
 
-  for h_row in hosts:
-    for s_row in svcs:
-      host = s_row.host.ipv4_addr
-      if host == h_row.ipv4_addr:
-        protocol = s_row.protocol
-        portid = s_row.portid
+  for h in hosts:
+    for s in svcs:
+      host = s.host.ipv4_addr
+      if host == h.ipv4_addr:
+        protocol = s.protocol
+        portid = s.portid
         try:
-          svc_name = s_row.name
+          svc_name = s.name
         except AttributeError:
           svc_name = 'unknown'
         try:
-          svc_product = s_row.svc_product
+          svc_product = s.svc_product
         except AttributeError:
           svc_product = 'unknown'
         try:
-          extrainfo = s_row.extrainfo
+          extrainfo = s.extrainfo
         except AttributeError:
           extrainfo = 'unknown'
         try:
-          product_id = s_row.product_id
+          product_id = s.product_id
         except AttributeError:
           product_id = 'unknown'
 
         if svc_name == 'msrpc' or svc_name == 'ldap' or svc_name == 'globalcatLDAPssl':
-          windows_hosts.append(h_row.ipv4_addr)
+          windows_hosts.append(h.ipv4_addr)
 
   win_host_set = set(windows_hosts)
   for h in win_host_set:
     print(h)
 
-    cs_query = wmic_query(s_domain, s_username, s_password, h, win32_computersystem)
-    #os_query = wmic_query(s_domain, s_username, s_password, h, win32_operatingsystem)
-    product_query = wmic_query(s_domain, s_username, s_password, h, win32_product)
-    #process_query = wmic_query(s_domain, s_username, s_password, h, win32_process)
-    #logonsession_query = wmic_query(s_domain, s_username, s_password, h, win32_logonsession)
-    #loggedonuser_query = wmic_query(s_domain, s_username, s_password, h, win32_loggedonuser)
-    #useraccount_query = wmic_query(s_domain, s_username, s_password, h, win32_useraccount)
+    cs_query = wmic_query(domain_name, username, password, h, win32_computersystem)
+    #os_query = wmic_query(domain_name, username, password, h, win32_operatingsystem)
+    product_query = wmic_query(domain_name, username, password, h, win32_product)
+    #process_query = wmic_query(domain_name, username, password, h, win32_process)
+    #logonsession_query = wmic_query(domain_name, username, password, h, win32_logonsession)
+    #loggedonuser_query = wmic_query(domain_name, username, password, h, win32_loggedonuser)
+    #useraccount_query = wmic_query(domain_name, username, password, h, win32_useraccount)
 
     failed_login = search(r'(failed NT status)', str(cs_query))
     error_login = search(r'(ERROR: Login to remote object)', str(cs_query))
