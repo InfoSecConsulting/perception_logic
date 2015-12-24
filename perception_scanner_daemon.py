@@ -8,7 +8,7 @@ from lib.db_connector import connect
 from models.db_tables import LocalHost, InventoryHost
 from datetime import datetime, timedelta
 from time import sleep
-
+from subprocess import check_output
 
 """Connect to the database"""
 Session = connect()
@@ -42,12 +42,19 @@ def main():
       if i.ip_addr not in scan_list:
         scan_list.append(i.ip_addr)
 
-
     '''
     daba56c8-73ec-11df-a475-002264764cea
 
-    omp --port=9390 --host=localhost --username=perception_admin --password="3aa27420-bf15-47a0-a984-78bfc0fd6166"
-    --xml='<create_target><name>core.h1tb.com</name><hosts>10.1.1.1</hosts></create_target>'
+    username = 'perception_admin'
+    password = '3aa27420-bf15-47a0-a984-78bfc0fd6166'
+    create_target = '<create_target><name>core.h1tb.com</name><hosts>10.1.1.1</hosts></create_target>'
+
+    create_target = check_output(['omp',
+                                  '--port=9390',
+                                  '--host=localhost',
+                                  '--username=%s' % username,
+                                  '--password=%s' % password,
+                                  '--xml=%s' % create_target])
 
     resp = 13a3795b-2be9-4e97-913d-6ffeaeba8d91
 
