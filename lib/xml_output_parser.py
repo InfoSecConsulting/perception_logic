@@ -8,7 +8,117 @@ Session = connect()
 session = Session()
 
 
-def parse_seed_nmap_xml(nmap_xml):
+def parse_openvas_xml(openvas_xml):
+  name = None
+  cvss = None
+  cve = None
+  host = None
+  threat = None
+  severity = None
+  family = None
+  port = None
+  bid = None
+  xrefs = None
+  tags = None
+
+  #  Parse the openvas xml file from and build the tree
+  try:
+      root = ET.fromstring(openvas_xml)
+  except ET.ParseError:
+      print('could not parse xml')
+      return
+
+  if root.tag == 'get_tasks_response':
+    # parse task response
+    task = root.iter('task')
+    for child in task:
+      status_element = child.find('status')
+      status = status_element.text
+      return status
+
+  if root.tag == 'get_reports_response':
+
+    # parse report xml
+    results = root.iter('result')
+
+    for result in results:
+
+      try:
+        name = result.find('name').text
+      except AttributeError:
+        '''none'''
+
+      try:
+        host = result.find('host').text
+      except AttributeError:
+        '''none'''
+
+      try:
+        threat = result.find('threat').text
+      except AttributeError:
+        '''none'''
+
+      try:
+        severity = result.find('severity').text
+      except AttributeError:
+        '''none'''
+
+      try:
+        port = result.find('port').text
+      except AttributeError:
+        '''none'''
+
+      nvt = result.iter('nvt')
+
+      # NVT info
+
+      for elem in nvt:
+
+        try:
+         cvss = elem.find('cvss_base').text
+        except AttributeError:
+          '''none'''
+
+        try:
+          cve = elem.find('cve').text
+        except AttributeError:
+          '''none'''
+
+        try:
+          family = elem.find('family').text
+        except AttributeError:
+          '''none'''
+
+        try:
+          bid = elem.find('bid').text
+        except AttributeError:
+          '''none'''
+
+        try:
+          xrefs = elem.find('xref').text
+        except AttributeError:
+          '''none'''
+
+        try:
+          tags = elem.find('tags').text
+        except AttributeError:
+          '''none'''
+
+      print('result name is %s' % name)
+      print('result cvss score is %s' % cvss)
+      print('result bug id is %s' % bid)
+      print('result cve id is %s' % cve)
+      print('result family is %s' % family)
+      print('result host is %s' % host)
+      print('result port is %s' % port)
+      print('result threat score is %s' % threat)
+      print('result severity score is %s' % severity)
+      print('result references are %s' % xrefs)
+      print('result tags are %s' % tags)
+      print('\n' * 3)
+
+
+def parse_nmap_xml(nmap_xml):
 
   #  Set variables
   cpe = 'None'
@@ -51,7 +161,7 @@ def parse_seed_nmap_xml(nmap_xml):
   # svc_nse_script_id = None
   # svc_nse_script_output = None
 
-  #  Parse the nmap xml files from this directory, and build the tree
+  #  Parse the nmap xml file and build the tree
   try:
       tree = ET.parse(nmap_xml)
       root = tree.getroot()

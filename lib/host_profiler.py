@@ -4,55 +4,56 @@ from lib.wmic_parser import wmic_query
 from lib.crypt import decrypt_string
 from lib.db_connector import connect
 from lib.ssh_to_host import check_creds
+from lib.scapy_scanner import tcp_scan
+
 
 """Connect to the database"""
 Session = connect()
 session = Session()
 
-win32_computersystem = 'select * from Win32_ComputerSystem'
-win32_account = 'select * from Win32_Account'
-win32_product = 'select * from Win32_Product'
+win32_computersystem =  'select * from Win32_ComputerSystem'
+win32_account =         'select * from Win32_Account'
+win32_product =         'select * from Win32_Product'
 win32_operatingsystem = 'select * from Win32_OperatingSystem'
-win32_process = 'select * from Win32_Process'
-win32_service = 'select * from Win32_Service'
-win32_loggedonuser = 'select * from Win32_LoggedOnUser'
-win32_logonsession = 'select * from Win32_LogonSession'
-win32_useraccount = 'select * from Win32_UserAccount'
+win32_process =         'select * from Win32_Process'
+win32_service =         'select * from Win32_Service'
+win32_loggedonuser =    'select * from Win32_LoggedOnUser'
+win32_logonsession =    'select * from Win32_LogonSession'
+win32_useraccount =     'select * from Win32_UserAccount'
 
 
 def match_creds_to_hosts(host_list):
 
+  # build vars
   smb_hosts = list()
   ssh_hosts = list()
 
-  #
-  # query db for hosts and services
-  #
+  # auth ports
+  smb_port = 135
+  ssh_port = 22
 
-  smb_host_query = session.query(InventorySvc).filter(InventorySvc.portid == 135)
-  ssh_host_query = session.query(InventorySvc).filter(InventorySvc.portid == 22)
-
+  # validate ports are open and add hosts to proper list
   for host in host_list:
 
-    for i in smb_host_query:
-      if i.inventory_host.ipv4_addr == host:
-        smb_hosts.append(host)
+    smb_check = tcp_scan(host, smb_port)
+    ssh_check = tcp_scan(host, ssh_port)
 
-    for i in ssh_host_query:
-      if i.inventory_host.ipv4_addr == host:
-        ssh_hosts.append(host)
+    if smb_check:
+      smb_hosts.append(host)
 
+    if ssh_check:
+      ssh_hosts.append(host)
+
+  # validate smb login credentials
   if smb_hosts:
 
-    #
-    # query db for svc accounts
-    #
-
+    # query database for smb credentials
     smb_svc_accounts = session.query(SmbUser).all()
     smb_accounts = list()
 
     if smb_svc_accounts:
 
+      # build a dictionary of smb accounts
       for u in smb_svc_accounts:
 
         smb_dict = {'id': u.id,
@@ -63,6 +64,7 @@ def match_creds_to_hosts(host_list):
 
         smb_accounts.append(smb_dict)
 
+      # validate credentials using WMI
       for h in smb_hosts:
 
         for u in smb_accounts:
@@ -82,18 +84,21 @@ def match_creds_to_hosts(host_list):
                 print('failed login for %s' % h)
 
               elif cs_query[0] != connection_refused and cs_query[0] != error_login and cs_query[0] != failed_login:
-                print('successful login to %s' % h)
-                session.query(InventoryHost).filter(InventoryHost.ipv4_addr == h)\
-                                            .update({InventoryHost.smb_user_id: u['id']})
+                add_inventory_host = InventoryHost(ipv4_addr=h,
+                                                   smb_user_id=u['id'])
+                session.add(add_inventory_host)
                 session.commit()
-                print('smb user added to %s ' % h)
 
+  # validate ssh login credentials
   if ssh_hosts:
+
+    # query database for ssh credentials
     linux_svc_accounts = session.query(LinuxUser).all()
     linux_accounts = list()
 
     if linux_svc_accounts:
 
+      # build a dictionary of ssh accounts
       for u in linux_svc_accounts:
 
         linux_dict = {'id': u.id,
@@ -106,18 +111,24 @@ def match_creds_to_hosts(host_list):
 
       for h in ssh_hosts:
 
-        #
-        # validate linux credentials
-        #
+        # validate credentials using ssh
         for u in linux_accounts:
 
           ssh_to_host = check_creds(h, u['username'], u['password'].decode("utf-8"))
 
           if ssh_to_host == 1:
-            session.query(InventoryHost).filter(InventoryHost.ipv4_addr == h)\
-                                        .update({InventoryHost.linux_user_id: u['id']})
+
+            add_inventory_host = InventoryHost(ipv4_addr=h,
+                                               linux_user_id=u['id'])
+            session.add(add_inventory_host)
             session.commit()
-            print('linux user added to %s ' % h)
+
+          if ssh_to_host == 99:
+            print('linux user not added to %s, bad ssh key' % h)
+            add_inventory_host = InventoryHost(ipv4_addr=h,
+                                               bad_ssh_key=True)
+            session.add(add_inventory_host)
+            session.commit()
 
 
 def profile_windows_hosts(domain_name, username, password):

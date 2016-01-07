@@ -8,11 +8,12 @@ ssh_newkey = 'Are you sure you want to continue connecting (yes/no)?'
 def check_creds(host, user, password):
 
   # construct the ssh session
+  bad_ssh_key = 'WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!'
   ssh_session = 'ssh %s@%s' % (user, host)
   child = spawnu(ssh_session)
 
   # expected return options
-  first_return = child.expect([TIMEOUT, ssh_newkey, '[P|p]assword', '.Connection refused\r\r\n'])
+  first_return = child.expect([TIMEOUT, ssh_newkey, '[P|p]assword', '.Connection refused\r\r\n', bad_ssh_key])
 
   # connection timed out, send you packing
   if first_return == 0:
@@ -98,6 +99,11 @@ def check_creds(host, user, password):
   if first_return == 3:
     print('connection refused for host %s' % host)
     return 0
+
+  # bad ssh key
+  if first_return == 4:
+    print(bad_ssh_key)
+    return 99
 
 
 def cisco_enable_mode(user, host, passwd, en_passwd):

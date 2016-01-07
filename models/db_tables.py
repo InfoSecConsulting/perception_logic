@@ -159,11 +159,8 @@ class InventoryHost(Base):
 
   info = Column(Text)
   comments = Column(Text)
-
-#  """Relation to tie NVD vulnerabilities to inventory hosts"""
-#  nvd_vuln_id = Column(Integer, ForeignKey('nvd_vulns.id'))
-#  nvd_vuln = relationship('NvdVuln', backref='inventory_hosts', order_by=id)
-
+  bad_ssh_key = Column(postgresql.BOOLEAN)
+  last_openvas_scan = Column(TIMESTAMP(timezone=False))
   created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
   updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
 
@@ -204,6 +201,7 @@ class InventorySvc(Base):
 
   created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
   updated_at = Column(TIMESTAMP(timezone=False), default=_get_date)
+
 
 class SvcNseScript(Base):
   __tablename__ = 'svc_nse_scripts'
@@ -315,3 +313,10 @@ class SnmpString(Base):
       snmp_group_tup = encrypt_string(str.encode(snmp_group))
       self.snmp_group_encrypted = snmp_group_tup[0].decode('utf-8')
       self.snmp_group_encrypted_salt = snmp_group_tup[1].decode('utf-8')
+
+
+class OpenvasLastUpdate(Base):
+  __tablename__ = 'openvas_last_updates'
+
+  id = Column(Integer, Sequence('openvas_last_updates_id_seq'), primary_key=True, nullable=False)
+  updated_at = Column(TIMESTAMP(timezone=False), nullable=False)

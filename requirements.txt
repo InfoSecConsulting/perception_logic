@@ -1,0 +1,4 @@
+sqlalchemy
+scapy-python3
+pyOpenSSL
+psycopg2

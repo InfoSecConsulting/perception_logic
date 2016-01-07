@@ -21,21 +21,23 @@ session = Session()
 def main():
   while True:
 
-    # verify openvas setup
+    # verify openvas is configured
     openvas_user = session.query(OpenvasAdmin).first()
-    if not openvas_user:
-      setup_openvas()
+
+    if not openvas_user:  # if it's not configured
+      setup_openvas()     # configured it
 
     try:
+
       # get info from core, save in tmp/perception/
-      get_network_info(tmp_dir,
+      get_network_info(tmp_dir,  # ssh to Cisco IOS core switch
                        ios_show_hosts_file,
                        ios_show_local_conn_file,
                        ios_show_cdp_detail_file,
                        ios_show_fqdn_file)
 
       # parse the local hosts file from /tmp/perception
-      local_hosts(ios_show_hosts_file)
+      local_hosts(ios_show_hosts_file)  # this function also removes stale hosts from inventory
 
       # parse the local connections file from /tmp/perception
       local_connections(ios_show_local_conn_file)
@@ -50,9 +52,6 @@ def main():
         rmtree(tmp_dir)
       except FileNotFoundError as e:
         print(e)
-
-      print('done seeding')
-      # exit()
 
     except ProgrammingError:
       print('database not ready')

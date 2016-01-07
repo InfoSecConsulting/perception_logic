@@ -2,17 +2,21 @@ from re import match, search
 from subprocess import check_output, CalledProcessError
 from os import system, path
 from OpenSSL import crypto
-from models.db_tables import OpenvasAdmin
+from models.db_tables import OpenvasAdmin, OpenvasLastUpdate
 from lib.db_connector import connect
+from lib.xml_output_parser import parse_openvas_xml
+from datetime import datetime
+
 
 redis_conf = '/etc/redis/redis.conf'
-port_regex = 's/^\(#.\)\?port.*$/port 0/'#compile(r'(^#.?port\s+)')
-unixsocket_regex = 's/^\(#.\)\?unixsocket \/.*$/unixsocket \/var\/lib\/redis\/redis.sock/' #compile(r'(^#.?unixsocket\s+)')
-unixsocketperm_regex = 's/^\(#.\)\?unixsocketperm.*$/unixsocketperm 700/'#compile(r'(^#.?unixsocketperm\s+)')
+port_regex = 's/^\(#.\)\?port.*$/port 0/'
+unixsocket_regex = 's/^\(#.\)\?unixsocket \/.*$/unixsocket \/var\/lib\/redis\/redis.sock/'
+unixsocketperm_regex = 's/^\(#.\)\?unixsocketperm.*$/unixsocketperm 700/'
 cacert_pem = '/var/lib/openvas/CA/cacert.pem'
 servercert_pem = '/var/lib/openvas/CA/servercert.pem'
 clientkey_pem = '/var/lib/openvas/private/CA/clientkey.pem'
 clientcert_pem = '/var/lib/openvas/CA/clientcert.pem'
+
 
 """Connect to the database"""
 Session = connect()
@@ -41,12 +45,17 @@ def setup_openvas():
 
     if servercert_valid is not True:
       system('openvas-mkcert -q -f')
-    system('openvas-nvt-sync && openvas-scapdata-sync && openvas-certdata-sync')
-    test_clientcert_pem = path.isfile(clientcert_pem)
-    test_clientkey_pem = path.isfile(clientkey_pem)
 
-    if test_clientcert_pem and test_clientkey_pem is not True:
+    # update openvas CERT, SCAP and NVT data
+    update_openvas_db()
+
+    # make sure client certs and client key files exist
+    test_clientcert_pem = path.isfile(clientcert_pem)
+    # test_clientkey_pem = path.isfile(clientkey_pem)
+
+    if test_clientcert_pem is not True:
       system('openvas-mkcert-client -n -i')
+
     # verify CAfile client certs with OpenSSL
     clientcert_valid = verify_certificate_chain(clientcert_pem, cacert_pem)
 
@@ -55,7 +64,7 @@ def setup_openvas():
 
     # stop services and migrate database
     system('service openvas-manager stop && service openvas-scanner stop')
-    system('openvassd && openvasmd --migrate && openvasmd --progress --rebuild')
+    system('openvassd && openvasmd --migrate && openvasmd --progress --rebuild -v')
 
     # kill all openvas services
     system('killall --wait openvassd')
@@ -74,8 +83,11 @@ def setup_openvas():
 
     add_user = OpenvasAdmin(username='perception_admin',
                             password=new_user_passwd)
-
     session.add(add_user)
+
+    add_update_info = OpenvasLastUpdate(updated_at=datetime.now())
+    session.add(add_update_info)
+
     session.commit()
 
 
@@ -103,15 +115,124 @@ def verify_certificate_chain(cert_str, trusted_certs):
       ca_cert_list.append(ca_cert)
 
     certificate = crypto.load_certificate(crypto.FILETYPE_PEM, client_cert.encode())
-    trustedcert = crypto.load_certificate(crypto.FILETYPE_PEM, ca_cert.encode())
+    trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, ca_cert.encode())
 
-    #Create a certificate store and add your trusted certs
+    # Create a certificate store and add your trusted certs
     store = crypto.X509Store()
-    store.add_cert(trustedcert)
+    store.add_cert(trusted_cert)
 
     # Create a certificate context using the store and the downloaded certificate
     store_ctx = crypto.X509StoreContext(store, certificate)
 
-    # Verify the certificate, returns None if it can validate the certificate
+    # Verify the certificate. Returns None if it can validate the certificate
     store_ctx.verify_certificate()
+
     return True
+
+
+def update_openvas_db():
+  system('openvas-nvt-sync && openvas-scapdata-sync && openvas-certdata-sync')
+
+
+def create_targets(targets_name, openvas_user_username, openvas_user_password, scan_list):
+  create_target_cli = '<create_target><name>%s</name><hosts>%s</hosts></create_target>' % (targets_name, ', '.join(scan_list))
+
+  create_target_response = check_output(['omp',
+                                         '--port=9390',
+                                         '--host=localhost',
+                                         '--username=%s' % openvas_user_username,
+                                         '--password=%s' % openvas_user_password,
+                                         '--xml=%s' % create_target_cli]).decode()
+
+  create_target_response_id = search(r'\w+[-]\w+[-]\w+[-]\w+[-]\w+', create_target_response).group(0)
+
+  return create_target_response_id
+
+
+def create_task(target_id, openvas_user_username, openvas_user_password):
+  create_task_cli = '<create_task><name>Initial Scan</name><comment>Initial Scan</comment><config id="daba56c8-73ec-11df-a475-002264764cea"/><target id="%s"/></create_task>' % target_id
+
+  create_task_response = check_output(['omp',
+                                       '--port=9390',
+                                       '--host=localhost',
+                                       '--username=%s' % openvas_user_username,
+                                       '--password=%s' % openvas_user_password,
+                                       '--xml=%s' % create_task_cli]).decode()
+
+  create_task_response_id = search(r'\w+[-]\w+[-]\w+[-]\w+[-]\w+', create_task_response).group(0)
+
+  return create_task_response_id
+
+
+def start_task(task_id, openvas_user_username, openvas_user_password):
+  start_task_cli = '<start_task task_id="%s"/>' % task_id
+
+  start_task_response = check_output(['omp',
+                                      '--port=9390',
+                                      '--host=localhost',
+                                      '--username=%s' % openvas_user_username,
+                                      '--password=%s' % openvas_user_password,
+                                      '--xml=%s' % start_task_cli]).decode()
+  xml_report_id = search(r'\w+[-]\w+[-]\w+[-]\w+[-]\w+', start_task_response).group(0)
+
+  return xml_report_id
+
+
+def check_task(task_id, openvas_user_username, openvas_user_password):
+  get_task_cli = '<get_tasks task_id="%s"/>' % task_id
+  get_task_cli_response = check_output(['omp',
+                                        '--port=9390',
+                                        '--host=localhost',
+                                        '--username=%s' % openvas_user_username,
+                                        '--password=%s' % openvas_user_password,
+                                        '--xml=%s' % get_task_cli]).decode()
+
+  return parse_openvas_xml(get_task_cli_response)
+
+
+def get_report(report_id, openvas_user_username, openvas_user_password):
+  get_report_cli = '<get_reports report_id="%s"/>' % report_id
+  get_report_cli_response = check_output(['omp',
+                                          '--port=9390',
+                                          '--host=localhost',
+                                          '--username=%s' % openvas_user_username,
+                                          '--password=%s' % openvas_user_password,
+                                          '--xml=%s' % get_report_cli]).decode()
+
+  parse_openvas_xml(get_report_cli_response)
+
+
+def delete_task(task_id, openvas_user_username, openvas_user_password):
+  delete_task_cli = '<delete_task task_id="%s"/>' % task_id
+  delete_task_cli_response = check_output(['omp',
+                                           '--port=9390',
+                                           '--host=localhost',
+                                           '--username=%s' % openvas_user_username,
+                                           '--password=%s' % openvas_user_password,
+                                           '--xml=%s' % delete_task_cli]).decode()
+
+  return delete_task_cli_response
+
+
+def delete_targets(target_id, openvas_user_username, openvas_user_password):
+  delete_targets_cli = '<delete_target target_id="%s"/>' % target_id
+  delete_targets_cli_response = check_output(['omp',
+                                              '--port=9390',
+                                              '--host=localhost',
+                                              '--username=%s' % openvas_user_username,
+                                              '--password=%s' % openvas_user_password,
+                                              '--xml=%s' % delete_targets_cli]).decode()
+
+  return delete_targets_cli_response
+
+
+def delete_reports(report_id, openvas_user_username, openvas_user_password):
+  delete_report_cli = '<delete_report report_id="%s"/>' % report_id
+  delete_report_cli_response = check_output(['omp',
+                                             '--port=9390',
+                                             '--host=localhost',
+                                             '--username=%s' % openvas_user_username,
+                                             '--password=%s' % openvas_user_password,
+                                             '--xml=%s' % delete_report_cli]).decode()
+
+  return delete_report_cli_response
