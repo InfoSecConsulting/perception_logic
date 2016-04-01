@@ -70,9 +70,17 @@ def match_creds_to_hosts(host_list):
         for u in smb_accounts:
               cs_query = wmic_query(u['domain_name'], u['username'], u['password'], h, win32_computersystem)
 
-              failed_login = {'[librpc/rpc/dcerpc_connect.c:828:dcerpc_pipe_connect_b_recv()] failed NT status (c0000022) in dcerpc_pipe_connect_b_recv': '[wmi/wmic.c:196:main()] ERROR: Loin to remote object.'}
-              error_login = {'[librpc/rpc/dcerpc_connect.c:828:dcerpc_pipe_connect_b_recv()] failed NT status (c0000017) in dcerpc_pipe_connect_b_recv': '[wmi/wmic.c:196:main()] ERROR: Login to remote object.'}
-              connection_refused = {'[librpc/rpc/dcerpc_connect.c:828:dcerpc_pipe_connect_b_recv()] failed NT status (c0000236) in dcerpc_pipe_connect_b_recv': '[wmi/wmic.c:196:main()] ERROR: Login to remote object.'}
+              failed_login = {'[librpc/rpc/dcerpc_connect.c:828:dcerpc_pipe_connect_b_recv()]'
+                              ' failed NT status (c0000022) in dcerpc_pipe_connect_b_recv':
+                              '[wmi/wmic.c:196:main()] ERROR: Loin to remote object.'}
+
+              error_login = {'[librpc/rpc/dcerpc_connect.c:828:dcerpc_pipe_connect_b_recv()] '
+                             'failed NT status (c0000017) in dcerpc_pipe_connect_b_recv':
+                             '[wmi/wmic.c:196:main()] ERROR: Login to remote object.'}
+
+              connection_refused = {'[librpc/rpc/dcerpc_connect.c:828:dcerpc_pipe_connect_b_recv()]'
+                                    ' failed NT status (c0000236) in dcerpc_pipe_connect_b_recv':
+                                    '[wmi/wmic.c:196:main()] ERROR: Login to remote object.'}
 
               if cs_query[0] == connection_refused:
                 print('connection refused from %s' % h)

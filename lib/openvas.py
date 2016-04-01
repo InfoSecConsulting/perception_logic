@@ -6,6 +6,7 @@ from models.db_tables import OpenvasAdmin, OpenvasLastUpdate
 from lib.db_connector import connect
 from lib.xml_output_parser import parse_openvas_xml
 from datetime import datetime
+from time import sleep
 
 
 redis_conf = '/etc/redis/redis.conf'
@@ -81,6 +82,9 @@ def setup_openvas():
       new_user = check_output(["openvasmd", "--create-user=perception_admin"]).decode()
       new_user_passwd = search(r'\w+[-]\w+[-]\w+[-]\w+[-]\w+', new_user).group(0)
 
+    # create the GNU Privacy Guard directory for LSC (Local Security Checks) accounts
+    system('mkdir /var/lib/openvas/gnupg')
+
     add_user = OpenvasAdmin(username='perception_admin',
                             password=new_user_passwd)
     session.add(add_user)
@@ -135,7 +139,10 @@ def update_openvas_db():
 
 
 def create_targets(targets_name, openvas_user_username, openvas_user_password, scan_list):
-  create_target_cli = '<create_target><name>%s</name><hosts>%s</hosts></create_target>' % (targets_name, ', '.join(scan_list))
+  create_target_cli = '<create_target>' \
+                      '<name>%s</name>' \
+                      '<hosts>%s</hosts>' \
+                      '</create_target>' % (targets_name, ', '.join(scan_list))
 
   create_target_response = check_output(['omp',
                                          '--port=9390',
@@ -149,8 +156,51 @@ def create_targets(targets_name, openvas_user_username, openvas_user_password, s
   return create_target_response_id
 
 
-def create_task(target_id, openvas_user_username, openvas_user_password):
-  create_task_cli = '<create_task><name>Initial Scan</name><comment>Initial Scan</comment><config id="daba56c8-73ec-11df-a475-002264764cea"/><target id="%s"/></create_task>' % target_id
+def create_targets_with_smb_lsc(targets_name, openvas_user_username, openvas_user_password, lsc_id, smb_scan_list):
+  create_target_cli = '<create_target>' \
+                      '<name>%s</name>' \
+                      '<hosts>%s</hosts>' \
+                      '<smb_lsc_credential id="%s"/>' \
+                      '</create_target>' % (targets_name, ', '.join(smb_scan_list), lsc_id)
+
+  create_target_response = check_output(['omp',
+                                         '--port=9390',
+                                         '--host=localhost',
+                                         '--username=%s' % openvas_user_username,
+                                         '--password=%s' % openvas_user_password,
+                                         '--xml=%s' % create_target_cli]).decode()
+
+  create_target_response_id = search(r'\w+[-]\w+[-]\w+[-]\w+[-]\w+', create_target_response).group(0)
+
+  return create_target_response_id
+
+
+def create_targets_with_ssh_lsc(targets_name, openvas_user_username, openvas_user_password, lsc_id, ssh_scan_list):
+  create_target_cli = '<create_target>' \
+                      '<name>%s</name>' \
+                      '<hosts>%s</hosts>' \
+                      '<ssh_lsc_credential id="%s"/>' \
+                      '</create_target>' % (targets_name, ', '.join(ssh_scan_list), lsc_id)
+
+  create_target_response = check_output(['omp',
+                                         '--port=9390',
+                                         '--host=localhost',
+                                         '--username=%s' % openvas_user_username,
+                                         '--password=%s' % openvas_user_password,
+                                         '--xml=%s' % create_target_cli]).decode()
+
+  create_target_response_id = search(r'\w+[-]\w+[-]\w+[-]\w+[-]\w+', create_target_response).group(0)
+
+  return create_target_response_id
+
+
+def create_task(task_name, target_id, openvas_user_username, openvas_user_password):
+  create_task_cli = '<create_task>' \
+                    '<name>%s</name>' \
+                    '<comment></comment>' \
+                    '<config id="daba56c8-73ec-11df-a475-002264764cea"/>' \
+                    '<target id="%s"/>' \
+                    '</create_task>' % (task_name, target_id)
 
   create_task_response = check_output(['omp',
                                        '--port=9390',
@@ -164,6 +214,38 @@ def create_task(target_id, openvas_user_username, openvas_user_password):
   return create_task_response_id
 
 
+def create_lsc_credential(name, login, password, openvas_user_username, openvas_user_password):
+
+  create_lsc_credential_cli = '<create_lsc_credential>' \
+                              '<name>%s</name>' \
+                              '<login>%s</login>' \
+                              '<password>%s</password>' \
+                              '<comment></comment>' \
+                              '</create_lsc_credential>' % (name, login, password)
+
+  create_lsc_credential_cli_response = check_output(['omp',
+                                                     '--port=9390',
+                                                     '--host=localhost',
+                                                     '--username=%s' % openvas_user_username,
+                                                     '--password=%s' % openvas_user_password,
+                                                     '--xml=%s' % create_lsc_credential_cli]).decode()
+
+  return parse_openvas_xml(create_lsc_credential_cli_response)
+
+
+def get_lsc_crdentials(openvas_user_username, openvas_user_password):
+  get_lsc_credential_cli = '<get_lsc_credentials/>'
+
+  get_lsc_credential_cli_response = check_output(['omp',
+                                                  '--port=9390',
+                                                  '--host=localhost',
+                                                  '--username=%s' % openvas_user_username,
+                                                  '--password=%s' % openvas_user_password,
+                                                  '--xml=%s' % get_lsc_credential_cli]).decode()
+
+  return parse_openvas_xml(get_lsc_credential_cli_response)
+
+
 def start_task(task_id, openvas_user_username, openvas_user_password):
   start_task_cli = '<start_task task_id="%s"/>' % task_id
 
@@ -173,6 +255,7 @@ def start_task(task_id, openvas_user_username, openvas_user_password):
                                       '--username=%s' % openvas_user_username,
                                       '--password=%s' % openvas_user_password,
                                       '--xml=%s' % start_task_cli]).decode()
+
   xml_report_id = search(r'\w+[-]\w+[-]\w+[-]\w+[-]\w+', start_task_response).group(0)
 
   return xml_report_id
@@ -236,3 +319,72 @@ def delete_reports(report_id, openvas_user_username, openvas_user_password):
                                              '--xml=%s' % delete_report_cli]).decode()
 
   return delete_report_cli_response
+
+
+def scanning(scan_list, openvas_user_username, openvas_user_password):
+  target_id = None
+  task_id = None
+  task_name = None
+  xml_report_id = None
+
+  if type(scan_list) is dict:
+
+    if scan_list['lsc_type'] == 'ssh':
+      # create the targets to scan
+      target_id = create_targets_with_ssh_lsc('initial ssh scan targets',
+                                              openvas_user_username,
+                                              openvas_user_password,
+                                              scan_list['lsc_id'],
+                                              scan_list['host_list'])
+      task_name = 'scan using ssh'
+
+    if scan_list['lsc_type'] == 'smb':
+      # create the targets to scan
+      target_id = create_targets_with_smb_lsc('initial smb scan targets',
+                                              openvas_user_username,
+                                              openvas_user_password,
+                                              scan_list['lsc_id'],
+                                              scan_list['host_list'])
+      task_name = 'scan using smb'
+
+  if type(scan_list) is list:
+    # create the targets to scan
+    target_id = create_targets('initial default scan targets',
+                               openvas_user_username,
+                               openvas_user_password,
+                               scan_list)
+
+    task_name = 'initial scan'
+
+  # setup the task
+  if target_id is not None:
+    task_id = create_task(task_name, target_id, openvas_user_username, openvas_user_password)
+
+  # run the task
+  if task_id is not None:
+    xml_report_id = start_task(task_id, openvas_user_username, openvas_user_password)
+
+  # wait until the task is done
+  while True:
+    check_task_response = check_task(task_id, openvas_user_username, openvas_user_password)
+    if check_task_response == 'Done' or check_task_response == 'Stopped':
+      break
+    print('still scanning')
+    sleep(60)
+
+  # download and parse the report
+  if xml_report_id is not None:
+    get_report(xml_report_id, openvas_user_username, openvas_user_password)
+  '''
+  # delete the task
+  if task_id is not None:
+    delete_task(task_id, openvas_user_username, openvas_user_password)
+
+  # delete the targets
+  if target_id is not None:
+    delete_targets(target_id, openvas_user_username, openvas_user_password)
+
+  # delete the report
+  if xml_report_id is not None:
+    delete_reports(xml_report_id, openvas_user_username, openvas_user_password)
+  '''

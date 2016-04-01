@@ -63,6 +63,7 @@ class SmbUser(Base):
 
   id = Column(Integer, primary_key=True, nullable=False)
   username = Column(String, nullable=False, unique=True)
+  openvas_lsc_id = Column(postgresql.UUID)
   encrypted_password = Column(String, nullable=False)
   encrypted_password_salt = Column(String, nullable=False)
   domain_name = Column(String, nullable=False)
@@ -75,7 +76,8 @@ class SmbUser(Base):
                username=None,
                password=None,
                domain_name=None,
-               description=None):
+               description=None,
+               openvas_lsc_id=None):
 
     if domain_name:
       self.domain_name = domain_name
@@ -91,12 +93,16 @@ class SmbUser(Base):
       self.encrypted_password = password_tup[0].decode("utf-8")
       self.encrypted_password_salt = password_tup[1].decode("utf-8")
 
+    if openvas_lsc_id:
+      self.openvas_lsc_id = openvas_lsc_id
+
 
 class LinuxUser(Base):
   __tablename__ = 'linux_users'
 
   id = Column(Integer, primary_key=True, nullable=False)
   username = Column(String, nullable=False, unique=True)
+  openvas_lsc_id = Column(postgresql.UUID)
   encrypted_password = Column(String, nullable=False)
   encrypted_password_salt = Column(String, nullable=False)
   encrypted_enable_password = Column(String)
@@ -110,7 +116,9 @@ class LinuxUser(Base):
                username=None,
                password=None,
                enable_password=None,
-               description=None):
+               description=None,
+               openvas_lsc_id=None):
+
     if description:
       self.description = description
 
@@ -126,6 +134,9 @@ class LinuxUser(Base):
       enable_password_tup = encrypt_string(str.encode(enable_password))
       self.encrypted_enable_password = enable_password_tup[0].decode('utf-8')
       self.encrypted_enable_password_salt = enable_password_tup[1].decode('utf-8')
+
+    if openvas_lsc_id:
+      self.openvas_lsc_id = openvas_lsc_id
 
 
 class InventoryHost(Base):

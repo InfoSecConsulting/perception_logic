@@ -1,13 +1,17 @@
 from subprocess import Popen, PIPE
-from os import mkdir
+from os import mkdir, devnull, system
 from time import sleep
 from re import match
 from lib.db_connector import connect
 from models.db_tables import LocalHost
+import sys
 
 """Connect to the database"""
 Session = connect()
 session = Session()
+
+
+FNULL = open(devnull, 'w')
 
 
 def get_hosts_to_scan():
@@ -47,13 +51,30 @@ def nmap_ss_scan(tmp_dir, scan_targets):
       if ip_addr:
         Popen([nmap, '-sS', '-sV', element, '-Pn', '-oX', '%s/%s.nmap.xml' % (tmp_dir, element)],
               shell=False,
-              stdout=PIPE)
+              stdout=FNULL)
 
       if subnet:
         Popen([nmap, '-sS', '-sV', element, '-oX' '%s/%s.nmap.xml' % (tmp_dir, element[:-3])],
               shell=False,
-              stdout=PIPE)
+              stdout=FNULL)
 
+    look_for_nmap = check_if_nmap_running()
+
+    while len(look_for_nmap.communicate()[0]) is not 0:
+      print('nmap is still running...')
+
+      # Check to see if nmap is still running
+      sleep(5)
+      look_for_nmap = check_if_nmap_running()
+
+    else:
+      print('no nmap processes')
+
+  except TypeError:
+    print('not ready to scan hosts')
+
+
+def check_if_nmap_running():
     # Check to see if nmap is still running
     ps_ef = Popen(['ps', '-ef'],
                   shell=False,
@@ -63,22 +84,4 @@ def nmap_ss_scan(tmp_dir, scan_targets):
                           shell=False,
                           stdin=ps_ef.stdout,
                           stdout=PIPE)
-
-    while len(look_for_nmap.communicate()[0]) is not 0:
-      print('nmap is still running...')
-
-      # Check to see if nmap is still running
-      sleep(5)
-      ps_ef = Popen(['ps', '-ef'],
-                    shell=False,
-                    stdout=PIPE)
-
-      look_for_nmap = Popen(['grep', 'nm\\ap'],
-                            shell=False,
-                            stdin=ps_ef.stdout,
-                            stdout=PIPE)
-    else:
-      print('no nmap processes')
-
-  except TypeError:
-    print('not ready to scan hosts')
+    return look_for_nmap

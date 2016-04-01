@@ -21,24 +21,48 @@ def parse_openvas_xml(openvas_xml):
   xrefs = None
   tags = None
 
-  #  Parse the openvas xml file from and build the tree
+  #  Parse the openvas xml
   try:
       root = ET.fromstring(openvas_xml)
   except ET.ParseError:
       print('could not parse xml')
       return
 
+  # parse get_tasks_response
   if root.tag == 'get_tasks_response':
-    # parse task response
+
     task = root.iter('task')
     for child in task:
       status_element = child.find('status')
       status = status_element.text
       return status
 
+  # parse create_lsc_credential_response
+  if root.tag == 'create_lsc_credential_response':
+
+    if root.attrib['status'] == '201':
+      return root.attrib['id']
+
+    if root.attrib['status'] == '400':
+      return root.attrib['status_text']
+
+  # parse get_lsc_credentials_response
+  if root.tag == 'get_lsc_credentials_response':
+
+    lsc_list = list()
+    lsc_creds = root.findall('lsc_credential')
+
+    for cred in lsc_creds:
+      cred_name = cred.find('name').text
+      lsc_id = cred.attrib['id']
+
+      lsc_list.append((cred_name, lsc_id))
+
+    return lsc_list
+
+  # parse get_reports_response
   if root.tag == 'get_reports_response':
 
-    # parse report xml
     results = root.iter('result')
 
     for result in results:
