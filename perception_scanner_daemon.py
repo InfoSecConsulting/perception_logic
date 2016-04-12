@@ -43,6 +43,7 @@ tmp_dir = '/tmp/perception_logic'
 
 
 def main():
+  #  TODO build true scanner daemon for release
   while True:
 
     # variables

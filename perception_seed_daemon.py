@@ -22,6 +22,7 @@ create_lsc_credential_error = 'LSC Credential exists already'
 
 
 def main():
+  #  TODO build true seed daemon for release
   while True:
 
     # verify openvas is configured
