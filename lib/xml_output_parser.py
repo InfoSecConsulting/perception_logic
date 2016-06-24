@@ -25,7 +25,7 @@ def parse_openvas_xml(openvas_xml):
   try:
       root = ET.fromstring(openvas_xml)
   except ET.ParseError:
-      print('could not parse xml')
+      print('could not parse openvas xml')
       return
 
   # parse get_tasks_response
@@ -190,7 +190,7 @@ def parse_nmap_xml(nmap_xml):
       tree = ET.parse(nmap_xml)
       root = tree.getroot()
   except ET.ParseError:
-      print('could not parse xml')
+      print('could not parse nmap xml')
       return
 
   #  Find all the hosts in the nmap scan
