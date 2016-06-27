@@ -331,3 +331,24 @@ class OpenvasLastUpdate(Base):
 
   id = Column(Integer, Sequence('openvas_last_updates_id_seq'), primary_key=True, nullable=False)
   updated_at = Column(TIMESTAMP(timezone=False), nullable=False)
+
+
+class Target(Base):
+  __tablename__ = 'targets'
+
+  id = Column(Integer, Sequence('targets_id_seq'), primary_key=True, nullable=False)
+  ip_addr = Column(postgresql.INET, unique=True)
+  subnet = Column(postgresql.CIDR, unique=True)
+  created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
+  updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
+
+  def __init__(self,
+               ipd_addr=None,
+               subnet=None):
+
+    if ipd_addr:
+      self.ip_addr = ipd_addr
+
+    if subnet:
+      self.subnet = subnet
+
