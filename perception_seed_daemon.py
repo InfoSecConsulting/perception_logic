@@ -3,7 +3,7 @@ from lib.ios_output_parser import local_hosts, local_connections, cdp_neighbors_
 from lib.openvas import setup_openvas, create_lsc_credential, get_lsc_crdentials
 from shutil import rmtree as rmtree
 from time import sleep
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import ProgrammingError, OperationalError
 from models.db_tables import OpenvasAdmin, SmbUser, LinuxUser
 from lib.db_connector import connect
 from lib.crypt import decrypt_string
@@ -25,11 +25,19 @@ def main():
   #  TODO build true seed daemon for release
   while True:
 
-    # verify openvas is configured
-    openvas_user = session.query(OpenvasAdmin).first()
+    try:
+      # verify openvas is configured
+      openvas_user = session.query(OpenvasAdmin).first()
 
-    if not openvas_user:  # if it's not configured
-      setup_openvas()     # configured it
+    except OperationalError as e:  # if it's not working
+      print('\nIt appears that something went wrong, did you setup the database.yml correctly?')
+      print('\n%s' % e)
+      quit()
+
+    if openvas_user is None:
+      # TODO figure out how to bypass needing root for this function `setup_openvas()`
+      setup_openvas()         # configured it
+      openvas_user = session.query(OpenvasAdmin).first()
 
     # make sure service accounts are created in OpenVAS
     smb_users = session.query(SmbUser).all()
@@ -75,9 +83,12 @@ def main():
             if linux_u.description in lsc_linux:
               print('lsc id is %s' % lsc_linux[1])
 
+    # TODO check if we are using the core router for targets
+
+    # if so get targets
     try:
 
-      # get info from core, save in tmp/perception/
+      # get info from core, save in /tmp/perception/
       get_network_info(tmp_dir,  # ssh to Cisco IOS core switch
                        ios_show_hosts_file,
                        ios_show_local_conn_file,
