@@ -352,3 +352,108 @@ class Target(Base):
     if subnet:
       self.subnet = subnet
 
+
+class DaysOfTheWeek(Base):
+  __tablename__ = 'days_of_the_week'
+
+  id = Column(Integer, Sequence('days_of_the_week_id_seq'), primary_key=True, nullable=False)
+  name = Column(Text, nullable=False, unique=True)
+  created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
+
+
+class ScheduleTypes(Base):
+  __tablename__ = 'schedule_types'
+
+  id = Column(Integer, Sequence('schedule_types_id_seq'), primary_key=True, nullable=False)
+  name = Column(Text, nullable=False, unique=True)
+  created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
+
+
+class Schedules(Base):
+  __tablename__ = 'schedules'
+
+  id = Column(Integer, Sequence('schedules_id_seq'), primary_key=True, nullable=False)
+  name = Column(Text, nullable=False)
+
+  schedule_type_id = Column(Integer, ForeignKey('schedule_types.id'))
+  schedule_types = relationship('ScheduleTypes', backref='schedules', order_by=id)
+
+  start_date = Column(TIMESTAMP(timezone=False))
+  created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
+  updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
+
+
+class DailySchedules(Base):
+  __tablename__ = 'daily_schedules'
+
+  id = Column(Integer, Sequence('daily_schedules_id_seq'), primary_key=True, nullable=False)
+  schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
+
+  day_of_week_id = Column(Integer, ForeignKey('days_of_the_week.id'), nullable=False)
+  days_of_week = relationship('DaysOfTheWeek', backref='daily_schedules', order_by=id)
+
+  time_of_day = Column(postgresql.TIME, nullable=False)
+  start_date = Column(TIMESTAMP(timezone=False), nullable=False)
+  end_date = Column(TIMESTAMP(timezone=False))
+  recurrence = Column(Integer, nullable=False)
+  created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
+  updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
+
+
+class WeeklySchedules(Base):
+  __tablename__ = 'weekly_schedules'
+
+  id = Column(Integer, Sequence('daily_schedules_id_seq'), primary_key=True, nullable=False)
+
+  schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
+  schedules = relationship('Schedules', backref='weekly_schedules', order_by=id)
+
+  day_of_week_id = Column(Integer, ForeignKey('days_of_the_week.id'), nullable=False)
+  days_of_week = relationship('DaysOfTheWeek', backref='weekly_schedules', order_by=id)
+
+  time_of_day = Column(postgresql.TIME, nullable=False)
+  start_date = Column(TIMESTAMP(timezone=False), nullable=False)
+  end_date = Column(TIMESTAMP(timezone=False))
+  recurrence = Column(Integer, nullable=False)
+  created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
+  updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
+
+
+class MonthlySchedules(Base):
+  __tablename__ = 'monthly_schedules'
+
+  id = Column(Integer, Sequence('monthly_schedules_id_seq'), primary_key=True, nullable=False)
+
+  schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
+  schedules = relationship('Schedules', backref='monthly_schedules', order_by=id)
+
+  day_of_month = Column(Integer, nullable=False)
+  time_of_day = Column(postgresql.TIME, nullable=False)
+  created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
+  updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
+
+
+class OneTimeSchedules(Base):
+  __tablename__ = 'one_time_schedules'
+
+  id = Column(Integer, Sequence('one_time_schedules_id_seq'), primary_key=True, nullable=False)
+
+  schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
+  schedules = relationship('Schedules', backref='one_time_schedules', order_by=id)
+
+  start_date = Column(TIMESTAMP(timezone=False), nullable=False)
+  created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
+  updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
+
+
+class Tasks(Base):
+  __tablename__ = 'tasks'
+
+  id = Column(Integer, Sequence('tasks_id_seq'), primary_key=True, nullable=False)
+
+  schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
+  schedules = relationship('Schedules', backref='tasks', order_by=id)
+
+  run_date = Column(TIMESTAMP(timezone=False), nullable=False)
+  created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
+  updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
