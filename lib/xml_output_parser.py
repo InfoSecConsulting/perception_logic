@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 from lib.db_connector import connect
 from sqlalchemy.exc import IntegrityError
-from models.db_tables import InventoryHost, MACVendor, Product, Vendor, InventorySvc, HostNseScript, SvcNseScript
+from models.db_tables import InventoryHost, MACVendor, Product, Vendor, InventorySvc, HostNseScript, SvcNseScript, Vulnerability
 
 """Connect to the database"""
 Session = connect()
@@ -23,10 +23,18 @@ def parse_openvas_xml(openvas_xml):
 
   #  Parse the openvas xml
   try:
-      root = ET.fromstring(openvas_xml)
+
+    # TODO add test to see of it's a file or string
+    # if it's a file
+    # tree = ET.parse(openvas_xml)
+    # root = tree.getroot()
+
+    # if it's a string
+    root = ET.fromstring(openvas_xml)
+
   except ET.ParseError:
-      print('could not parse openvas xml')
-      return
+    print('could not parse openvas xml')
+    return
 
   # parse get_tasks_response
   if root.tag == 'get_tasks_response':
@@ -128,18 +136,29 @@ def parse_openvas_xml(openvas_xml):
         except AttributeError:
           '''none'''
 
-      print('result name is %s' % name)
-      print('result cvss score is %s' % cvss)
-      print('result bug id is %s' % bid)
-      print('result cve id is %s' % cve)
-      print('result family is %s' % family)
-      print('result host is %s' % host)
-      print('result port is %s' % port)
-      print('result threat score is %s' % threat)
-      print('result severity score is %s' % severity)
-      print('result references are %s' % xrefs)
-      print('result tags are %s' % tags)
-      print('\n' * 3)
+      if float(cvss) > 0.0:
+        inventory_host = session.query(InventoryHost).filter_by(ipv4_addr=host).first()
+
+        #  Add the vulnerability to the database
+        add_vuln = Vulnerability(name=name,
+                                 cvss_score=cvss,
+                                 cve_id=cve,
+                                 family=family,
+                                 bug_id=bid,
+                                 inventory_host_id=inventory_host.id,
+                                 port=port,
+                                 threat_score=threat,
+                                 severity_score=severity,
+                                 xrefs=xrefs,
+                                 tags=tags)
+
+        #  If the OS product does not exist, add it
+        #try:
+        session.add(add_vuln)
+        session.commit()
+
+        #except IntegrityError:
+        session.rollback()
 
 
 def parse_nmap_xml(nmap_xml):
