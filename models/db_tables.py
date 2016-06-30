@@ -46,7 +46,7 @@ class OpenvasAdmin(Base):
 
   id = Column(Integer, Sequence('openvas_admin_id_seq'), primary_key=True, nullable=False)
   username = Column(Text, unique=True, nullable=False)
-  password = Column(Text, nullable=False)
+  password = Column(postgresql.UUID, nullable=False)
   created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
   updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
 
@@ -353,7 +353,7 @@ class Target(Base):
       self.subnet = subnet
 
 
-class DaysOfTheWeek(Base):
+class DayOfTheWeek(Base):
   __tablename__ = 'days_of_the_week'
 
   id = Column(Integer, Sequence('days_of_the_week_id_seq'), primary_key=True, nullable=False)
@@ -361,7 +361,7 @@ class DaysOfTheWeek(Base):
   created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
 
 
-class ScheduleTypes(Base):
+class ScheduleType(Base):
   __tablename__ = 'schedule_types'
 
   id = Column(Integer, Sequence('schedule_types_id_seq'), primary_key=True, nullable=False)
@@ -369,28 +369,32 @@ class ScheduleTypes(Base):
   created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
 
 
-class Schedules(Base):
+class Schedule(Base):
   __tablename__ = 'schedules'
 
   id = Column(Integer, Sequence('schedules_id_seq'), primary_key=True, nullable=False)
   name = Column(Text, nullable=False)
 
   schedule_type_id = Column(Integer, ForeignKey('schedule_types.id'))
-  schedule_types = relationship('ScheduleTypes', backref='schedules', order_by=id)
+  schedule_types = relationship('ScheduleType', backref='schedules', order_by=id)
 
   start_date = Column(TIMESTAMP(timezone=False))
   created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
   updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
 
 
-class DailySchedules(Base):
+class DailySchedule(Base):
   __tablename__ = 'daily_schedules'
 
   id = Column(Integer, Sequence('daily_schedules_id_seq'), primary_key=True, nullable=False)
-  schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
 
+  """Relation to schedules"""
+  schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
+  schedules = relationship('Schedule', backref='daily_schedules', order_by=id)
+
+  """Relation to days_of_the_week"""
   day_of_week_id = Column(Integer, ForeignKey('days_of_the_week.id'), nullable=False)
-  days_of_week = relationship('DaysOfTheWeek', backref='daily_schedules', order_by=id)
+  days_of_week = relationship('DayOfTheWeek', backref='daily_schedules', order_by=id)
 
   time_of_day = Column(postgresql.TIME, nullable=False)
   start_date = Column(TIMESTAMP(timezone=False), nullable=False)
@@ -400,16 +404,18 @@ class DailySchedules(Base):
   updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
 
 
-class WeeklySchedules(Base):
+class WeeklySchedule(Base):
   __tablename__ = 'weekly_schedules'
 
   id = Column(Integer, Sequence('daily_schedules_id_seq'), primary_key=True, nullable=False)
 
+  """Relation to schedules"""
   schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
-  schedules = relationship('Schedules', backref='weekly_schedules', order_by=id)
+  schedules = relationship('Schedule', backref='weekly_schedules', order_by=id)
 
+  """Relation to days_of_the_week"""
   day_of_week_id = Column(Integer, ForeignKey('days_of_the_week.id'), nullable=False)
-  days_of_week = relationship('DaysOfTheWeek', backref='weekly_schedules', order_by=id)
+  days_of_week = relationship('DayOfTheWeek', backref='weekly_schedules', order_by=id)
 
   time_of_day = Column(postgresql.TIME, nullable=False)
   start_date = Column(TIMESTAMP(timezone=False), nullable=False)
@@ -419,13 +425,14 @@ class WeeklySchedules(Base):
   updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
 
 
-class MonthlySchedules(Base):
+class MonthlySchedule(Base):
   __tablename__ = 'monthly_schedules'
 
   id = Column(Integer, Sequence('monthly_schedules_id_seq'), primary_key=True, nullable=False)
 
+  """Relation to schedules"""
   schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
-  schedules = relationship('Schedules', backref='monthly_schedules', order_by=id)
+  schedules = relationship('Schedule', backref='monthly_schedules', order_by=id)
 
   day_of_month = Column(Integer, nullable=False)
   time_of_day = Column(postgresql.TIME, nullable=False)
@@ -433,27 +440,66 @@ class MonthlySchedules(Base):
   updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
 
 
-class OneTimeSchedules(Base):
+class OneTimeSchedule(Base):
   __tablename__ = 'one_time_schedules'
 
   id = Column(Integer, Sequence('one_time_schedules_id_seq'), primary_key=True, nullable=False)
 
+  """Relation to schedules"""
   schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
-  schedules = relationship('Schedules', backref='one_time_schedules', order_by=id)
+  schedules = relationship('Schedule', backref='one_time_schedules', order_by=id)
 
   start_date = Column(TIMESTAMP(timezone=False), nullable=False)
   created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
   updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
 
 
-class Tasks(Base):
+class Task(Base):
   __tablename__ = 'tasks'
 
   id = Column(Integer, Sequence('tasks_id_seq'), primary_key=True, nullable=False)
 
+  """Relation to schedules"""
   schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
-  schedules = relationship('Schedules', backref='tasks', order_by=id)
+  schedules = relationship('Schedule', backref='tasks', order_by=id)
 
   run_date = Column(TIMESTAMP(timezone=False), nullable=False)
   created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
   updated_at = Column(TIMESTAMP(timezone=False), onupdate=_get_date)
+
+
+class Vulnerability(Base):
+  __tablename__ = 'vulnerabilities'
+
+  id = Column(Integer, primary_key=True, nullable=False)
+  name = Column(Text, nullable=False)
+  cvss_score = Column(postgresql.FLOAT, nullable=False)
+  bug_id = Column(Text)
+  family = Column(Text)
+  cve_id = Column(Text)
+
+  """Relation to inventory_hosts"""
+  inventory_host_id = Column(Integer, ForeignKey('inventory_hosts.id', ondelete='cascade'))
+  inventory_host = relationship('InventoryHost', backref='vulnerabilities', order_by=id)
+
+  port = Column(Text)
+  threat_score = Column(Text)
+  severity_score = Column(postgresql.FLOAT)
+  xrefs = Column(Text)
+  tags = Column(Text)
+  validated = Column(postgresql.BOOLEAN)
+  created_at = Column(TIMESTAMP(timezone=False), default=_get_date)
+
+
+class ScheduleIndex(Base):
+  __tablename__ = 'schedules_index'
+
+  id = Column(Integer, primary_key=True, nullable=False)
+
+  """Relation to schedules"""
+  schedule_id = Column(Integer, ForeignKey('schedules.id'), nullable=False)
+  schedules = relationship('Schedule', backref='schedule_index', order_by=id)
+
+  """Relation to targets"""
+  target_id = Column(Integer, ForeignKey('targets.id', ondelete='cascade'))
+  target = relationship('Target', backref='schedule_index', order_by=id)
