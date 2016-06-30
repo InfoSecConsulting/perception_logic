@@ -2,6 +2,8 @@ from os import walk
 from re import match
 from shutil import rmtree as rmtree
 from lib.host_profiler import match_creds_to_hosts
+from sqlalchemy.util.queue import Empty as sq_empty
+from sqlalchemy.exc import OperationalError
 from lib.db_connector import connect
 from lib.openvas import create_task, \
   create_targets, \
@@ -16,7 +18,7 @@ from lib.openvas import create_task, \
   get_report, \
   scanning
 from lib.nmap_scanner import nmap_ss_scan
-from models.db_tables import OpenvasAdmin, OpenvasLastUpdate, InventoryHost, SmbUser, LinuxUser
+from models.db_tables import OpenvasAdmin, OpenvasLastUpdate, InventoryHost, SmbUser, LinuxUser, Tasks
 from datetime import datetime, timedelta
 from time import sleep
 from lib.latest_hosts_query import get_hosts
@@ -29,12 +31,21 @@ from queue import Queue
 Session = connect()
 session = Session()
 
-# Get openvas user information
-openvas_user = session.query(OpenvasAdmin).first()
+openvas_user = None
+
+try:
+  # Get openvas user information
+  openvas_user = session.query(OpenvasAdmin).first()
+
+except OperationalError as e:
+  print('\nIt appears that something went wrong, did you setup the database.yml correctly?')
+  print('\n%s' % e)
+  quit()
 
 # make user user is configured
-if not openvas_user:
-  print('It appears that there is not a current OpenVAS admin in the database, please make sure seed daemon is running.')
+if openvas_user is None:
+  print('\nIt appears that there is not a current OpenVAS admin in the database,'
+        ' please make sure seed daemon is running.\n')
   quit()
 
 openvas_user_username = openvas_user.username
@@ -55,12 +66,6 @@ def main():
     smb_dict = {}
     linux_dict = {}
 
-    # get current local hosts
-    scan_list = get_hosts()
-
-    # validate credentials
-    #match_creds_to_hosts(scan_list)
-
     # update openvas NVT's, CERT data, and CPE's
     one_day_ago = datetime.now() - timedelta(hours=24)
     check_last_update = session.query(OpenvasLastUpdate).order_by(OpenvasLastUpdate.id.desc()).first()
@@ -71,6 +76,15 @@ def main():
       add_update_info = OpenvasLastUpdate(updated_at=datetime.now())
       session.add(add_update_info)
       session.commit()
+
+    # TODO check schedule to see if it's time to run
+
+
+    # get current local hosts
+    #scan_list = get_hosts()
+
+    # validate credentials
+    #match_creds_to_hosts(scan_list)
 
     '''
     # get list of smb user ids
@@ -121,6 +135,7 @@ def main():
     #  t.start()
 
     # send tmp directory and scan_list to nmap
+    '''
     nmap_ss_scan(tmp_dir, scan_list)
 
     # loop through all xml nmap scans to parse
@@ -131,6 +146,7 @@ def main():
           parse_nmap_xml(str('%s/%s' % (tmp_dir, nmap_xml.group(0))))
     rmtree(tmp_dir)
 
+    '''
     print('sleeping')
     sleep(300)
 
